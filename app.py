@@ -5,11 +5,6 @@ from groq import Groq
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
 from datetime import datetime
 import io
 
@@ -150,41 +145,6 @@ def create_word_document(notulen, vergadering_info):
     buffer.seek(0)
     return buffer
 
-# ─── EMAIL VERSTUREN ───────────────────────────────────────────────────
-def send_email(ontvanger, onderwerp, notulen_text, word_buffer, vergadering_naam):
-    gmail_user = os.environ.get("GMAIL_USER")
-    gmail_password = os.environ.get("GMAIL_APP_PASSWORD")
-    
-    msg = MIMEMultipart()
-    msg['From'] = gmail_user
-    msg['To'] = ontvanger
-    msg['Subject'] = onderwerp
-    
-    body = f"""Beste,
-
-Hierbij de notulen van {vergadering_naam}.
-
-{notulen_text}
-
-Met vriendelijke groet,
-MeetingMate 🎤
-"""
-    msg.attach(MIMEText(body, 'plain', 'utf-8'))
-    
-    # Word bijlage
-    attachment = MIMEBase('application', 'octet-stream')
-    attachment.set_payload(word_buffer.read())
-    encoders.encode_base64(attachment)
-    attachment.add_header(
-        'Content-Disposition',
-        f'attachment; filename="Notulen_{vergadering_naam}_{datetime.now().strftime("%d%m%Y")}.docx"'
-    )
-    msg.attach(attachment)
-    
-    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-        server.login(gmail_user, gmail_password)
-        server.sendmail(gmail_user, ontvanger, msg.as_string())
-
 # ─── HOOFDAPP ──────────────────────────────────────────────────────────
 def main():
     # Header
@@ -285,7 +245,6 @@ def main():
         st.divider()
         st.subheader("📄 Notulen")
         
-        # Tabs voor resultaten
         tab1, tab2 = st.tabs(["📝 Notulen", "🎤 Transcriptie"])
         
         with tab1:
@@ -296,52 +255,21 @@ def main():
         
         st.divider()
         
-        # ── STAP 4: Downloaden & Mailen ──
-        st.subheader("📤 Stap 4: Downloaden & Mailen")
+        # ── STAP 4: Downloaden ──
+        st.subheader("📥 Stap 4: Notulen downloaden")
         
-        col1, col2 = st.columns(2)
+        word_buffer = create_word_document(
+            st.session_state.notulen,
+            st.session_state.vergadering_info
+        )
         
-        with col1:
-            # Word downloaden
-            word_buffer = create_word_document(
-                st.session_state.notulen,
-                st.session_state.vergadering_info
-            )
-            
-            st.download_button(
-                label="📥 Download als Word",
-                data=word_buffer,
-                file_name=f"Notulen_{vergadering_naam}_{datetime.now().strftime('%d%m%Y')}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True
-            )
-        
-        with col2:
-            # Email versturen
-            with st.expander("📧 Notulen mailen", expanded=True):
-                email_ontvanger = st.text_input("📧 Ontvanger emailadres", placeholder="naam@email.com")
-                email_onderwerp = st.text_input("📌 Onderwerp", value=f"Notulen {vergadering_naam} - {vergadering_info['datum']}")
-                
-                if st.button("📨 Verstuur Email", use_container_width=True):
-                    if not email_ontvanger:
-                        st.error("❌ Vul een emailadres in!")
-                    else:
-                        with st.spinner("📧 Email wordt verstuurd..."):
-                            try:
-                                word_buffer_mail = create_word_document(
-                                    st.session_state.notulen,
-                                    st.session_state.vergadering_info
-                                )
-                                send_email(
-                                    email_ontvanger,
-                                    email_onderwerp,
-                                    st.session_state.notulen,
-                                    word_buffer_mail,
-                                    vergadering_naam
-                                )
-                                st.success(f"✅ Email verstuurd naar {email_ontvanger}!")
-                            except Exception as e:
-                                st.error(f"❌ Fout bij versturen: {str(e)}")
+        st.download_button(
+            label="📥 Download als Word",
+            data=word_buffer,
+            file_name=f"Notulen_{vergadering_naam}_{datetime.now().strftime('%d%m%Y')}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True
+        )
 
 # ─── APP STARTEN ───────────────────────────────────────────────────────
 if __name__ == "__main__":
